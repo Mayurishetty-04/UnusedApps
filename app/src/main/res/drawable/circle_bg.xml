@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+
+    <!-- Ensures the circle stays round and consistent -->
+    <size
+        android:width="56dp"
+        android:height="56dp" />
+
+    <!-- Soft white background for visibility on all themes -->
+    <solid android:color="#FFFFFF" />
+
+    <!-- Light gray stroke to give a subtle border -->
+    <stroke
+        android:width="1dp"
+        android:color="#1A000000" />
+
+    <!-- Padding keeps icon centered and not clipped -->
+    <padding
+        android:left="6dp"
+        android:top="6dp"
+        android:right="6dp"
+        android:bottom="6dp" />
+</shape>

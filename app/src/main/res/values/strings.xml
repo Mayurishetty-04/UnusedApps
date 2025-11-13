@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">unusedapps</string>
+    <string name="app_icon">App Icon</string>
+    <string name="uninstall">Uninstall</string>
+</resources>
