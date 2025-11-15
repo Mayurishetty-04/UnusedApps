@@ -13,38 +13,33 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.RecyclerView
-import java.text.DateFormat
 
 class AppListAdapter(
-    private val context: Context,
-    private var appList: MutableList<AppInfo>
+    private val context: Context
 ) : RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
 
     private val pm: PackageManager = context.packageManager
-    // debugInfo: packageName -> debug string
-    private var debugInfo: Map<String, String> = emptyMap()
-    var showDebug: Boolean = false
+    private var fullList: MutableList<AppInfo> = mutableListOf()
+    private var visibleList: MutableList<AppInfo> = mutableListOf()
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val icon: ImageView = view.findViewById(R.id.appIcon)
         val name: TextView = view.findViewById(R.id.appName)
         val pkg: TextView = view.findViewById(R.id.appPackage)
         val lastUsed: TextView = view.findViewById(R.id.appLastUsed)
-        val debug: TextView = view.findViewById(R.id.appDebug)
         val btnUninstall: ImageButton = view.findViewById(R.id.btnUninstall)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(context).inflate(R.layout.item_app, parent, false)
-        return ViewHolder(view)
+        val v = LayoutInflater.from(context).inflate(R.layout.item_app, parent, false)
+        return ViewHolder(v)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val app = appList[position]
+        val app = visibleList[position]
 
         try {
-            val iconDrawable = pm.getApplicationIcon(app.packageName)
-            holder.icon.setImageDrawable(iconDrawable)
+            holder.icon.setImageDrawable(pm.getApplicationIcon(app.packageName))
         } catch (e: Exception) {
             holder.icon.setImageResource(android.R.drawable.sym_def_app_icon)
         }
@@ -52,19 +47,9 @@ class AppListAdapter(
         holder.name.text = app.name
         holder.pkg.text = app.packageName
 
-        holder.lastUsed.text = if (app.lastUsed <= 0L)
-            "Never used"
-        else {
-            DateUtils.getRelativeTimeSpanString(app.lastUsed, System.currentTimeMillis(), DateUtils.DAY_IN_MILLIS).toString()
-        }
-
-        // debug
-        val dbg = debugInfo[app.packageName]
-        if (showDebug && !dbg.isNullOrEmpty()) {
-            holder.debug.visibility = View.VISIBLE
-            holder.debug.text = dbg
-        } else {
-            holder.debug.visibility = View.GONE
+        holder.lastUsed.text = when {
+            app.lastUsed <= 0L -> "Never used"
+            else -> DateUtils.getRelativeTimeSpanString(app.lastUsed, System.currentTimeMillis(), DateUtils.DAY_IN_MILLIS).toString()
         }
 
         holder.btnUninstall.setOnClickListener {
@@ -77,7 +62,7 @@ class AppListAdapter(
         holder.itemView.setOnClickListener {
             AlertDialog.Builder(context)
                 .setTitle(app.name)
-                .setMessage("Package: ${app.packageName}\n${holder.lastUsed.text}" + (if (!dbg.isNullOrEmpty()) "\n\nDebug: $dbg" else ""))
+                .setMessage("Package: ${app.packageName}\nLast used: ${holder.lastUsed.text}")
                 .setPositiveButton("Uninstall") { _, _ ->
                     val intent = Intent(Intent.ACTION_DELETE)
                     intent.data = Uri.parse("package:${app.packageName}")
@@ -89,24 +74,23 @@ class AppListAdapter(
         }
     }
 
-    override fun getItemCount(): Int = appList.size
+    override fun getItemCount(): Int = visibleList.size
 
-    fun filterList(query: String) {
-        val q = query.trim()
-        if (q.isEmpty()) {
-            // no-op — filter should be applied by MainActivity via adapter.updateList
-            // You can implement incremental filtering here if desired.
-            return
-        }
-        // simple in-place filter (not preserving full list here; MainActivity will call updateList)
-        appList = appList.filter { it.name.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true) }.toMutableList()
+    fun updateList(newList: List<AppInfo>) {
+        fullList = newList.toMutableList()
+        visibleList = newList.toMutableList()
         notifyDataSetChanged()
     }
 
-    /** update list and optional debug info map */
-    fun updateList(newList: List<AppInfo>, debugMap: Map<String, String> = emptyMap()) {
-        appList = newList.toMutableList()
-        debugInfo = debugMap
+    fun filterList(query: String) {
+        val q = query.trim()
+        visibleList = if (q.isEmpty()) {
+            fullList.toMutableList()
+        } else {
+            fullList.filter {
+                it.name.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true)
+            }.toMutableList()
+        }
         notifyDataSetChanged()
     }
 }

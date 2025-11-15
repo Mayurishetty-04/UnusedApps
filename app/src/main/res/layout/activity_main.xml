@@ -9,15 +9,15 @@
     android:background="@android:color/white"
     tools:context=".MainActivity">
 
-    <!-- Gradient header -->
+    <!-- Header with orange gradient (header_gradient drawable required) -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="180dp"
         android:orientation="vertical"
         android:gravity="bottom"
         android:paddingStart="20dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="24dp"
+        android:paddingBottom="20dp"
         android:background="@drawable/header_gradient">
 
         <TextView
@@ -38,14 +38,13 @@
             android:layout_marginTop="4dp"
             android:textColor="@android:color/white" />
 
-        <!-- Scan button - visually distinct -->
         <Button
             android:id="@+id/btnScan"
             android:layout_width="wrap_content"
             android:layout_height="42dp"
             android:text="SCAN"
             android:textAllCaps="true"
-            android:textColor="@color/black"
+            android:textColor="@android:color/black"
             android:layout_marginTop="12dp"
             android:layout_gravity="center_horizontal"
             android:backgroundTint="@android:color/white"
@@ -53,38 +52,35 @@
             android:paddingHorizontal="20dp" />
     </LinearLayout>
 
-    <!-- White background buffer to separate header and search -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="12dp"
+        android:layout_height="6dp"
         android:background="@android:color/white" />
 
-    <!-- Search Bar -->
-    <LinearLayout
+    <androidx.appcompat.widget.SearchView
+        android:id="@+id/searchView"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="8dp"
+        android:queryHint="Search apps"
+        app:iconifiedByDefault="false" />
+
+    <TextView
+        android:id="@+id/infoText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="10dp"
-        android:gravity="center_vertical"
-        android:background="@android:color/white"
-        android:elevation="2dp">
+        android:text=""
+        android:padding="12dp"
+        android:visibility="gone"
+        android:textColor="@android:color/darker_gray" />
 
-        <androidx.appcompat.widget.SearchView
-            android:id="@+id/searchView"
-            android:layout_width="match_parent"
-            android:layout_height="42dp"
-            android:layout_marginHorizontal="8dp"
-            android:queryHint="Search apps"
-            app:iconifiedByDefault="false" />
-    </LinearLayout>
-
-    <!-- Recycler container -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeLayout"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@android:color/white">
+        android:layout_weight="1">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"
