@@ -3,8 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.unusedapps">
 
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+    <!-- Permission to access app usage -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+
+    <!-- Needed to list installed apps -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <application
@@ -13,13 +17,24 @@
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.Unusedapps">
+
+        <!-- Landing Page (launcher screen) -->
         <activity
-            android:name=".MainActivity"
+            android:name=".LandingActivity"
             android:exported="true">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
+
+        <!-- Main scanning screen -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true" />
+
     </application>
+
 </manifest>

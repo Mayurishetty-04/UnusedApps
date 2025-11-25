@@ -2,24 +2,21 @@ package com.example.unusedapps
 
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
-import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.snackbar.Snackbar
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.android.material.snackbar.Snackbar
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
@@ -27,16 +24,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recycler: RecyclerView
     private lateinit var scanBtn: Button
     private lateinit var swipeLayout: SwipeRefreshLayout
-    private lateinit var rootView: View
     private lateinit var adapter: AppListAdapter
+    private lateinit var rootView: View
     private lateinit var searchView: SearchView
-    private lateinit var infoText: TextView
 
     private val UNUSED_DAYS = 30L
-
-    // Set to true to include apps with NO timestamp (may produce false positives).
-    // Leave false for accurate "only apps with system-provided lastTimeUsed older than 30 days".
-    private val AGGRESSIVE_MODE = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,166 +39,143 @@ class MainActivity : AppCompatActivity() {
         scanBtn = findViewById(R.id.btnScan)
         swipeLayout = findViewById(R.id.swipeLayout)
         searchView = findViewById(R.id.searchView)
-        infoText = findViewById(R.id.infoText)
 
         recycler.layoutManager = LinearLayoutManager(this)
-        adapter = AppListAdapter(this)
+        adapter = AppListAdapter(this, mutableListOf())
         recycler.adapter = adapter
 
         scanBtn.setOnClickListener {
-            if (!isUsageAccessGrantedViaAppOps()) {
-                promptGrantUsageAccess()
+            if (!hasUsagePermission()) {
+                openUsageSettings()
             } else {
                 swipeLayout.isRefreshing = true
-                scanInstalledApps()
+                scanApps()
                 swipeLayout.isRefreshing = false
             }
         }
 
         swipeLayout.setOnRefreshListener {
-            if (!isUsageAccessGrantedViaAppOps()) {
+            if (!hasUsagePermission()) {
+                showSnackbar("Please enable Usage Access.")
                 swipeLayout.isRefreshing = false
-                promptGrantUsageAccess()
             } else {
-                scanInstalledApps()
+                scanApps()
                 swipeLayout.isRefreshing = false
             }
         }
 
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                adapter.filterList(query ?: "")
-                return true
-            }
+            override fun onQueryTextSubmit(query: String?) = true
             override fun onQueryTextChange(newText: String?): Boolean {
                 adapter.filterList(newText ?: "")
                 return true
             }
         })
 
-        if (isUsageAccessGrantedViaAppOps()) {
-            scanInstalledApps()
+        if (hasUsagePermission()) {
+            scanApps()
         } else {
-            infoText.visibility = View.VISIBLE
-            infoText.text = "Tap SCAN and grant Usage Access when prompted."
+            showSnackbar("Tap SCAN and grant Usage Access.")
         }
     }
 
-    private fun promptGrantUsageAccess() {
-        val sb = Snackbar.make(rootView, "Usage Access is required for accurate results.", Snackbar.LENGTH_INDEFINITE)
-        sb.setAction("Open Settings") {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
-        sb.show()
-    }
-
-    /**
-     * Conservative scan:
-     * - gather MOVE_TO_FOREGROUND events and aggregated stats in a long window (1 year),
-     * - choose the latest timestamp for each package,
-     * - include package only when chosen > 0 and chosen < cutoff (older than UNUSED_DAYS).
-     * If AGGRESSIVE_MODE==true we also list packages with chosen==0 as "Never used".
-     */
-    private fun scanInstalledApps() {
-        infoText.visibility = View.GONE
-
+    private fun scanApps() {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
         val cutoff = now - TimeUnit.DAYS.toMillis(UNUSED_DAYS)
 
-        // Gather events over 1 year to maximize chance of seeing last use
-        val eventsWindowStart = now - TimeUnit.DAYS.toMillis(365)
-        val lastUsedByEvent = mutableMapOf<String, Long>()
-        try {
-            val events = usm.queryEvents(eventsWindowStart, now)
-            val ev = UsageEvents.Event()
-            while (events.hasNextEvent()) {
-                events.getNextEvent(ev)
-                if (ev.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    val pkg = ev.packageName ?: continue
-                    val ts = ev.timeStamp
-                    val prev = lastUsedByEvent[pkg] ?: 0L
-                    if (ts > prev) lastUsedByEvent[pkg] = ts
-                }
+        // 1) Foreground events reading
+        val eventsStart = now - TimeUnit.DAYS.toMillis(365)
+        val events = usm.queryEvents(eventsStart, now)
+        val lastUsedEvent = mutableMapOf<String, Long>()
+        val event = UsageEvents.Event()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                lastUsedEvent[event.packageName] = event.timeStamp
             }
+        }
+
+        // 2) Aggregated stats fallback
+        val agg = try {
+            usm.queryAndAggregateUsageStats(eventsStart, now)
         } catch (e: Exception) {
-            e.printStackTrace()
+            emptyMap<String, android.app.usage.UsageStats>()
         }
 
-        // Fallback aggregated stats
-        val aggregated: Map<String, UsageStats>? = try {
-            usm.queryAndAggregateUsageStats(eventsWindowStart, now)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-
-        // If both sources empty -> likely permission/OEM restriction
-        if ((lastUsedByEvent.isEmpty() || lastUsedByEvent.values.all { it == 0L }) &&
-            (aggregated == null || aggregated.isEmpty())
-        ) {
-            if (!AGGRESSIVE_MODE) {
-                infoText.visibility = View.VISIBLE
-                infoText.text = "No usage data available. Grant Usage Access and allow background activity (some OEMs require reboot)."
-                adapter.updateList(emptyList())
-                return
-            }
-            // else: aggressive mode will still list apps (with chosen==0)
-        }
-
-        val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+        // 3) Installed apps
+        val installed = packageManager.getInstalledApplications(0)
         val unused = ArrayList<AppInfo>()
 
         for (app in installed) {
             if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
-            if (!app.enabled) continue
-            if (app.packageName == packageName) continue
 
             val pkg = app.packageName
-            val fromEvent = lastUsedByEvent[pkg] ?: 0L
-            val fromAgg = aggregated?.get(pkg)?.lastTimeUsed ?: 0L
-            val chosen = maxOf(fromEvent, fromAgg)
+            val eventTime = lastUsedEvent[pkg] ?: 0L
+            val aggTime = agg[pkg]?.lastTimeUsed ?: 0L
+            val lastUsed = maxOf(eventTime, aggTime)
 
-            val include = if (AGGRESSIVE_MODE) {
-                (chosen > 0L && chosen < cutoff) || (chosen == 0L)
-            } else {
-                (chosen > 0L && chosen < cutoff)
-            }
-
-            if (include) {
+            if (lastUsed < cutoff) {
                 val label = try {
                     packageManager.getApplicationLabel(app).toString()
                 } catch (ex: Exception) {
                     pkg
                 }
-                unused.add(AppInfo(label, pkg, chosen))
+
+                unused.add(
+                    AppInfo(
+                        packageName = pkg,
+                        appName = label,
+                        lastUsed = lastUsed
+                    )
+                )
             }
         }
 
-        // Sort: oldest used first; treat 0 (unknown) as newest if conservative, or last if aggressive
-        unused.sortWith(compareBy<AppInfo> { if (it.lastUsed == 0L) Long.MAX_VALUE else it.lastUsed })
-
+        unused.sortBy { it.lastUsed }
         adapter.updateList(unused)
 
         if (unused.isEmpty()) {
-            infoText.visibility = View.VISIBLE
-            infoText.text = "No apps unused for $UNUSED_DAYS days were found."
+            showSnackbar("No unused apps found in last $UNUSED_DAYS days.")
         }
     }
 
-    private fun isUsageAccessGrantedViaAppOps(): Boolean {
-        return try {
-            val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-            val mode = appOps.checkOpNoThrow(
-                "android:get_usage_stats",
-                Process.myUid(),
-                packageName
-            )
-            mode == AppOpsManager.MODE_ALLOWED
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
+    // --------------------------------------------
+    //   PERMISSION FIX (THE IMPORTANT PART)
+    // --------------------------------------------
+
+    private fun hasUsagePermission(): Boolean {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.checkOpNoThrow(
+            "android:get_usage_stats",
+            Process.myUid(),
+            packageName
+        )
+        return when (mode) {
+            AppOpsManager.MODE_ALLOWED -> true
+            AppOpsManager.MODE_DEFAULT ->
+                checkUsageStatsFallback()
+            else -> false
         }
+    }
+
+    private fun checkUsageStatsFallback(): Boolean {
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val stats = usm.queryUsageStats(
+            UsageStatsManager.INTERVAL_DAILY,
+            System.currentTimeMillis() - 1000 * 1000,
+            System.currentTimeMillis()
+        )
+        return stats != null && stats.isNotEmpty()
+    }
+
+    private fun openUsageSettings() {
+        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        showSnackbar("Please grant Usage Access to continue.")
+    }
+
+    private fun showSnackbar(msg: String) {
+        Snackbar.make(rootView, msg, Snackbar.LENGTH_LONG).show()
     }
 }
-
