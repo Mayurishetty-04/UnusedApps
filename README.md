@@ -33,7 +33,8 @@ This helps users free up storage and improve device performance by uninstalling 
 ---
 
 ## 📸 Screenshots
-(You can add screenshots later)
+<img width="540" height="1206" alt="image" src="https://github.com/user-attachments/assets/00c5c961-23bc-4ff7-866c-f312eabe8947" />
+
 
 ---
 
